@@ -1,0 +1,389 @@
+library(plyr)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+require(plyr)
+require(dplyr)
+require(tidyverse)
+require(ggplot2)
+
+setwd("/Users/karolinamullokand/Desktop/ECO_B2000")
+load("Household_Pulse_data_ph4c2.RData")
+
+d_social <- Household_Pulse_data %>% filter(SOCIAL1 != "NA" & TBIRTH_YEAR < 2005)
+
+d_social$s_e_support_lack <- as.numeric( 
+  (d_social$SOCIAL1 == "sometimes") |
+    (d_social$SOCIAL1 == "rarely") |
+    (d_social$SOCIAL1 == "never") )
+
+d_social$SOCIAL1 <- fct_drop(d_social$SOCIAL1)
+
+d_social$Age = 2022 - d_social$TBIRTH_YEAR
+
+d_tw_for_graph <- d_social %>% filter((TWDAYS != "NA") & Age < 65)
+
+p_wfh_sesupport <- ggplot(data = d_tw_for_graph,
+                          mapping = aes(x = Age,
+                                        y = s_e_support_lack,
+                                        color = TWDAYS,
+                                        fill = TWDAYS))
+
+p_wfh_sesupport + geom_smooth(aes(color=TWDAYS, fill=TWDAYS)) + 
+  scale_color_viridis_d(option = "cividis", end = 0.75) + scale_fill_viridis_d(option = "cividis", end = 0.75) + 
+  labs(x = "Age", y = "no social emotional support",color = "field") + guides(fill = "none")
+
+#1
+H0:The proportion of people who lack emotional support in the age group [15,23] is the same as in [25,35] age group
+H_A: The The proportion of people who lack emotional support differs between the age group [15,23] ana [25,35] age group
+
+n_15_25 <- 2271  #Total
+n_25_35 <- 9137  # Total 
+
+n_15_25_lacks <- 1039  
+n_25_35_lacks <- 3708  
+
+x <- c(n_15_25_lacks, n_25_35_lacks)  # Yes amount
+n <- c(n_15_25, n_25_35)  # tOotal amount
+
+# proportions
+p_15_25 <- n_15_25_lacks / n_15_25  
+p_25_35 <- n_25_35_lacks / n_25_35  
+
+#estimate 
+estimate <- p_15_25 - p_25_35
+
+p_hat <- sum(x) / sum(n)
+
+# standard error
+SE <- sqrt(p_hat * (1 - p_hat) * (1 / n[1] + 1 / n[2]))
+
+# z-stat
+z_stat <- (p_15_25 - p_25_35) / SE
+
+# prop.test
+result <- prop.test(x, n, alternative = "two.sided", conf.level = 0.95)
+print(result)
+print(z_stat)
+print(SE)
+print(estimate)
+
+Result:
+p-value is less that 0.05 , and that means we are ___rejecting null hypothesis___
+95% CI means that difference between in the rates of those who lacks emotional support is likely between 2.85% and 7.47%
+z_stat. is far from 0 and it proves significance.
+Individuals aged [15,25] are more likely to report lacking social/emotional support compared to those aged [25,35], 
+with a difference between 2.85% and 7.47%.
+
+
+#2
+d_social$educ_recode <- fct_recode(d_social$EEDUC,
+                                   "not 4yr degree" = "less than hs",
+                                   "not 4yr degree" = "some hs",
+                                   "not 4yr degree" = "HS diploma",
+                                   "not 4yr degree" = "some coll",
+                                   "not 4yr degree" = "assoc deg",
+                                   "4yr or more" = "bach deg",
+                                   "4yr or more" = "adv deg")
+
+s_WFH_educ <- ddply(d_social,.(educ_recode), summarize, 
+                    noWFH = sum(TWDAYS == "had no telework days in past week", na.rm = TRUE),
+                    WFH = sum(TWDAYS == "had 1-2 telework days in past week", na.rm = TRUE) + 
+                      sum(TWDAYS == "had 3-4 telework days in past week", na.rm = TRUE) + 
+                      sum(TWDAYS == "had 5+ telework days in past week", na.rm = TRUE))  
+)
+
+library(knitr)
+kable(s_WFH_educ)
+
+#Hypothesis testing 1:
+H0: The proportion of individuals who report social/emotional support is ___the same___ between those who WFH and those who do not.
+H_a: The proportion of individuals who report social/emotional support is ___different___ between those who WFH and those who do not.
+
+n_WFH <- 21269  # total WFH
+n_noWFH <- 42982  # total noWFH
+
+view(d_social)
+view(s_WFH_educ)
+
+#deriving from dataset people who got emotional support and who don't, as well as those who WFH and noWFH
+d_social$WFH <- ifelse(d_social$TWDAYS == "had no telework days in past week", 0, 1)
+support_summary <- d_social %>%
+  group_by(WFH, s_e_support_lack) %>%
+  summarise(count = n(), .groups = 'drop')
+
+print(support_summary)
+
+n_WFH_support <- 14642  # total WFH with emotional support
+n_noWFH_support <- 27384 # total noWFH with emotional support
+
+
+#for prop.test
+x <- c(n_WFH_support, n_noWFH_support)  # Yes counts for each group (having support)
+n <- c(n_WFH, n_noWFH)  # Total counts for each group
+
+#proportions
+p_WFH <- n_WFH_support / n_WFH  #proportion with support for WFH
+p_noWFH <- n_noWFH_support / n_noWFH  #proportion with support for noWFH
+
+#estimate
+estimate <- p_WFH - p_noWFH
+
+#pooled proportion
+p_hat <- sum(x) / sum(n)
+
+#standard error
+SE <- sqrt(p_hat * (1 - p_hat) * (1 / n[1] + 1 / n[2]))
+
+#z-statistic
+z_stat <- estimate / SE
+
+# Perform the proportion test using prop.test
+result <- prop.test(x, n, alternative = "two.sided", conf.level = 0.95)
+
+print(result)
+print(z_stat)
+print(SE)
+print(estimate)
+
+#Results:
+Proportion of WFH with support 68.17% of individuals who work from home report having social/emotional support.
+Proportion of noWFH with support 63.71% of individuals who do not work from home report having support.
+Estimate: The difference in proportions is 0.05132, meaning that those who work from home are about 5.13% more 
+likely to report social/emotional support.
+p-value: < 2.2e-16, which is much smaller than 0.05. This means we ___reject the null hypothesis___, indicating 
+that the difference in support between those who work from home and those who do not is statistically significant.
+95% Confidence Interval: (0.04357, 0.05906), suggesting that the true difference in proportions lies between 4.36% and 5.91%.
+Therefore, I am ___rejecting null hypothesis___ There is a statistically significant difference in the proportions of 
+social/emotional support between individuals who work from home and those who do not.
+
+#Hypothesis testing #2
+H0:The proportion of individuals lacking social/emotional support is ___the same___ between those with a 4-year degree or more 
+and those with less than a 4-year degree.
+H-A:The proportion of individuals lacking social/emotional support is ___different___ between those with a 4-year degree or more 
+and those with less than a 4-year degree.
+
+support_educ_summary <- d_social %>%
+  group_by(educ_recode, s_e_support_lack) %>%
+  summarise(count = n(), .groups = 'drop')
+
+print(support_educ_summary)
+
+n_4yr <- 33592  #4-year degree or more
+n_not_4yr <- 30862  #without a 4-year degree
+
+n_4yr_lacks <- 9767  #4-year degree who lack support
+n_not_4yr_lacks <- 12661  #without a 4-year degree who lack support
+
+#for prop.test
+x <- c(n_4yr_lacks, n_not_4yr_lacks)  #lacking support in each group
+n <- c(n_4yr, n_not_4yr)  #totalcounts for each group
+
+# proportions
+p_4yr <- n_4yr_lacks / n_4yr 
+p_not_4yr <- n_not_4yr_lacks / n_not_4yr 
+
+#estimate
+estimate <- p_4yr - p_not_4yr
+
+p_hat <- sum(x) / sum(n)
+
+#standard error
+SE <- sqrt(p_hat * (1 - p_hat) * (1 / n[1] + 1 / n[2]))
+
+#z-statistic
+z_stat <- estimate / SE
+
+result <- prop.test(x, n, alternative = "two.sided", conf.level = 0.95)
+
+print(result)
+print(z_stat)
+print(SE)
+print(estimate)
+
+#Results:
+p-value, which is much smaller than 0.05, indicates that we reject the null hypothesis.
+95% Confidence Interval: (-0.1269, -0.1121), suggesting that the true difference 
+in proportions lies between -12.69% and -11.21%.
+There is a statistically significant difference in the proportion of individuals
+lacking social/emotional support between those with a 4-year degree or more and 
+those with less than a 4-year degree.
+Meaning, individuals with a 4-year degree or more are ___less likely___ to report 
+lacking social/emotional support compared to those with less education.
+
+#3
+
+setwd("/Users/karolinamullokand/Desktop/ECO_B2000")
+load("Household_Pulse_data_ph4c2.RData")
+d_social <- Household_Pulse_data %>% filter(SOCIAL1 != "NA" & TBIRTH_YEAR < 2005)
+d_social$s_e_support_lack <- as.numeric( 
+  (d_social$SOCIAL1 == "sometimes") |
+    (d_social$SOCIAL1 == "rarely") |
+    (d_social$SOCIAL1 == "never") )
+
+d_social$SOCIAL1 <- fct_drop(d_social$SOCIAL1)
+
+d_social$Age = 2022 - d_social$TBIRTH_YEAR
+
+d_tw_for_graph <- d_social %>% filter((TWDAYS != "NA") & Age < 65)
+
+p_wfh_sesupport <- ggplot(data = d_tw_for_graph,
+                          mapping = aes(x = Age,
+                                        y = s_e_support_lack,
+                                        color = TWDAYS,
+                                        fill = TWDAYS))
+p_wfh_sesupport + geom_smooth(aes(color=TWDAYS, fill=TWDAYS)) + 
+  scale_color_viridis_d(option = "cividis", end = 0.75) + scale_fill_viridis_d(option = "cividis", end = 0.75) + 
+  labs(x = "Age", y = "no social emotional support",color = "field") + guides(fill = "none")
+d_social$educ_recode <- fct_recode(d_social$EEDUC,
+                                   "not 4yr degree" = "less than hs",
+                                   "not 4yr degree" = "some hs",
+                                   "not 4yr degree" = "HS diploma",
+                                   "not 4yr degree" = "some coll",
+                                   "not 4yr degree" = "assoc deg",
+                                   "4yr or more" = "bach deg",
+                                   "4yr or more" = "adv deg")
+s_WFH_educ <- ddply(d_social,.(educ_recode), summarize, 
+                    noWFH = sum(TWDAYS == "had no telework days in past week", na.rm = TRUE),
+                    WFH = sum(TWDAYS == "had 1-2 telework days in past week", na.rm = TRUE) + 
+                      sum(TWDAYS == "had 3-4 telework days in past week", na.rm = TRUE) + 
+                      sum(TWDAYS == "had 5+ telework days in past week", na.rm = TRUE)  
+)
+library(knitr)
+kable(s_WFH_educ)
+
+Household_Pulse_data$s_e_support_numeric <- fct_recode(d_social$SOCIAL1,
+                                                       "5" = "always get social emotional support",
+                                                       "4" = "usually",
+                                                       "3" = "sometimes",
+                                                       "2" = "rarely",
+                                                       "1" = "never") 
+#THIS CODE DIDN'T RUN ON MY COMPUTER
+Household_Pulse_data$s_e_support_numeric <- as.numeric(levels(Household_Pulse_data$s_e_support_numeric))[Household_Pulse_data$s_e_support_numeric]
+
+
+#4
+Form a hypothesis test about an interesting variable, explore whether that variable adds something to understanding social and emotional support. 
+Please provide both a p-value for the hypothesis test and a confidence interval. Write a short paragraph explaining the test
+(carefully noting what is the null hypothesis) and explaining the results of that test.
+
+view(d_social)
+view(d_social$KIDS_LT5Y)
+summary(d_social$KIDS_LT5Y)
+H0:The proportion of people who lack social/emotional support is the same regardless of whether they have children under 5 in their household.
+HA:The proportion of people who lack social/emotional support differs between those who have children under 5 in their household and those who do not.
+
+# support lack status by presence of children under 5 years
+support_summary <- d_social %>%
+  filter(!is.na(KIDS_LT5Y), !is.na(s_e_support_lack)) %>%
+  group_by(KIDS_LT5Y, s_e_support_lack) %>%
+  summarise(count = n(), .groups = 'drop')
+
+print(support_summary)
+
+n_no_kids <- 38129 + 19889  #no specified children status
+n_with_kids <- 3897 + 2539  #with children under 5
+
+n_no_kids_lacks <- 19889  
+n_with_kids_lacks <- 2539  
+
+#for prop.test
+x <- c(n_no_kids_lacks, n_with_kids_lacks) 
+n <- c(n_no_kids, n_with_kids) 
+
+result <- prop.test(x, n, alternative = "two.sided", conf.level = 0.95)
+print(result)
+
+Result:
+  By p-value I can understand that the observed difference in the proportions of
+people lacking social/emotional support between those with and without children under 5
+is very unlikely to have occurred by chance alone.
+The interval (-0.0643, -0.0391) means that the true difference in proportions of 
+people lacking support between the two groups is likely between -6.43% and -3.91%.
+The negative sign suggests that the proportion of people lacking support is lower 
+for those with children under 5 compared to those without children under 5.
+
+
+#5
+Age <- 2024 - Household_Pulse_data$TBIRTH_YEAR
+
+distincted_data <- distinct(Household_Pulse_data, EEDUC, INCOME, ANYWORK, TBIRTH_YEAR)
+
+distincted_data$age <- 2024 - distincted_data$TBIRTH_YEAR
+
+
+prime_labor_force <- distincted_data %>%
+  filter(ANYWORK == "yes employment in last 7 days", age >= 25 & age <= 55)
+
+
+new_dataset <- merge(distincted_data, prime_labor_force)
+
+new_dataset$income_midpoint <- fct_recode(new_dataset$INCOME, 
+                                          "12500" = "HH income less than $25k",
+                                          "30000" = "HH income $25k - $34.9k",
+                                          "40000" = "HH income $35k - 49.9",
+                                          "62500" = "HH income $50k - 74.9",
+                                          "82500" = "HH income $75 - 99.9",
+                                          "125000" = "HH income $100k - 149",
+                                          "175000" = "HH income $150 - 199",
+                                          "225000" = "HH income $200k +",
+                                          NULL = "NA")
+
+new_dataset$income_midpoint <- as.numeric(as.character(new_dataset$income_midpoint))
+
+
+new_dataset_clean <- new_dataset %>%
+  filter(!is.na(income_midpoint) & is.finite(income_midpoint))
+
+model_1 <- lm(income_midpoint ~ age + EEDUC, data = new_dataset_clean)
+
+#Predictors Used: 
+The model uses age and EEDUC (education level) as predictors:
+Age: Age is a continuous variable that captures the effect of age on income. 
+Generally, age is positively associated with income until a certain point, after
+which it may plateau or decline as people approach retirement.
+EEDUC: Education level is a categorical variable that represents the highest level 
+of education attained. It is often a strong predictor of income, with higher levels of 
+education typically associated with higher earning potential.
+#Polynomials in Age: The code does not currently include polynomials of age, 
+but they could be considered to capture a non-linear relationship between age and income 
+(such as income growth slowing after a certain age). Including a polynomial term could be done as follows:
+Interpretation of Estimates:
+Age: A positive estimate for age would mean that, as age increases, income tends to increase
+EEDUC (Education Levels): The estimates for different education levels
+reflect the difference in expected income relative to the reference category (the level not 
+shown in the output). Higher education levels (e.g., bachelor's or graduate degrees) 
+are generally expected to have positive estimates, indicating higher income.
+
+#6
+d_social <- d_social %>%
+  mutate(age = 2024 - TBIRTH_YEAR)
+
+d_social <- d_social %>%
+  filter(!is.na(s_e_support_lack), !is.na(KIDS_LT5Y), !is.na(age)) %>%
+  mutate(
+    has_kids_under_5 = ifelse(KIDS_LT5Y == "Yes children under 5 in HH", 1, 0),
+    s_e_support_lack = as.factor(s_e_support_lack)
+  )
+
+set.seed(123)
+train_indices <- sample(nrow(d_social), size = 0.7 * nrow(d_social))
+train_data <- d_social[train_indices, ]
+test_data <- d_social[-train_indices, ]
+library(class)
+
+train_x <- train_data %>% select(age, has_kids_under_5)
+test_x <- test_data %>% select(age, has_kids_under_5)
+train_y <- train_data$s_e_support_lack
+
+
+set.seed(123)
+k <- 5
+predictions <- knn(train = train_x, test = test_x, cl = train_y, k = k)
+
+
+confusion_matrix <- table(Predicted = predictions, Actual = test_data$s_e_support_lack)
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+
+
+print(confusion_matrix)
